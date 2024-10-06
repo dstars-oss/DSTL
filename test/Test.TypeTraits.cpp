@@ -16,6 +16,8 @@ Abstract:
 #include "DSTL.hpp"
 using namespace dstl;
 
+TEST_SUITE_BEGIN("TypeTraits");
+
 union test_union
 {
     int i_;
@@ -151,7 +153,7 @@ TEST_CASE("checks if a type is a pointer to a non-static member object")
     CHECK(!is_member_object_pointer_v<int(test_class::*)()>);
 }
 
-TEST_CASE("	checks if a type is a enumeration/union /class type")
+TEST_CASE("checks if a type is a enumeration/union /class type")
 {
     enum e { e_ };
     CHECK(is_enum_v<e>);
@@ -280,11 +282,11 @@ TEST_CASE("checks if a type is a compound type")
     CHECK(is_compound_v<char[100]>);
     CHECK(is_compound_v<test_class>);
     CHECK(is_compound_v<test_union>);
- 
+
     enum struct E { e };
     CHECK(is_compound_v<E>);
     CHECK(is_compound_v<decltype(E::e)>);
-    
+
     CHECK(!is_compound_v<decltype(test_class::public_val_)>);
     CHECK(is_compound_v<decltype(&test_class::public_val_)>);
     CHECK(is_compound_v<decltype(&test_class::member_func)>);
@@ -318,3 +320,162 @@ TEST_CASE("checks if a type is volatile-qualified")
     CHECK(is_volatile_v<volatile int>);
     CHECK(is_volatile_v<volatile const int>);
 }
+
+TEST_CASE("obtains the number of dimensions of an array type")
+{
+    CHECK(rank<int>{} == 0);
+    CHECK(rank<int[5]>{} == 1);
+    CHECK(rank<int[5][5]>{} == 2);
+    CHECK(rank<int[][5][5]>{} == 3);
+}
+
+TEST_CASE("obtains the size of an array type along a specified dimension")
+{
+    CHECK(extent_v<int[3]> == 3);
+    CHECK(extent_v<int[3], 0> == 3);
+    CHECK(extent_v<int[3][4], 0> == 3);
+    CHECK(extent_v<int[3][4], 1> == 4);
+    CHECK(extent_v<int[3][4], 2> == 0);
+    CHECK(extent_v<int[]> == 0);
+}
+
+TEST_CASE("checks if two types are the same")
+{
+    CHECK(is_same_v<int, int>);
+    CHECK(!is_same_v<int, double>);
+}
+
+TEST_CASE("removes const and/or volatile specifiers from the given type")
+{
+    CHECK(is_same_v<remove_cv_t<int>, int>);
+    CHECK(is_same_v<remove_cv_t<const int>, int>);
+    CHECK(is_same_v<remove_cv_t<volatile int>, int>);
+    CHECK(is_same_v<remove_cv_t<const volatile int>, int>);
+    CHECK(!is_same_v<remove_cv_t<const volatile int*>, int*>);
+    CHECK(is_same_v<remove_cv_t<const volatile int*>, const volatile int*>);
+    CHECK(is_same_v<remove_cv_t<const int* volatile>, const int*>);
+    CHECK(is_same_v<remove_cv_t<int* const volatile>, int*>);
+}
+
+TEST_CASE("adds const and/or volatile specifiers to the given type")
+{
+    CHECK(is_same_v<add_const_t<int>, const int>);
+    CHECK(is_same_v<add_volatile_t<int>, volatile int>);
+    CHECK(is_same_v<add_cv_t<int>, const volatile int>);
+}
+
+TEST_CASE("adds a lvalue or rvalue reference to the given type")
+{
+    using non_ref = int;
+    CHECK(is_lvalue_reference_v<non_ref> == false);
+
+    using l_ref = add_lvalue_reference_t<non_ref>;
+    CHECK(is_lvalue_reference_v<l_ref> == true);
+
+    using r_ref = add_rvalue_reference_t<non_ref>;
+    CHECK(is_rvalue_reference_v<r_ref> == true);
+
+    using void_ref = add_lvalue_reference_t<void>;
+    CHECK(is_reference_v<void_ref> == false);
+}
+
+TEST_CASE("removes extent from the given array type")
+{
+    float a0;
+    float a1[1][2][3];
+    float *a3;
+
+    CHECK(is_same_v<remove_extent_t<decltype(a0)>, float>);
+    CHECK(is_same_v<remove_extent_t<decltype(a1)>, float[2][3]>);
+    CHECK(is_same_v<remove_all_extents_t<decltype(a1)>, float>);
+
+    CHECK(is_same_v<remove_extent_t<decltype(a3)>, float*>);
+    CHECK(is_same_v<remove_all_extents_t<decltype(a3)>, float*>);
+}
+
+TEST_CASE("removes a pointer from the given type")
+{
+    CHECK(is_same_v<int, remove_pointer_t<int>> == true);
+    CHECK(is_same_v<int, remove_pointer_t<int*>> == true);
+    CHECK(is_same_v<int, remove_pointer_t<int**>> == false);
+    CHECK(is_same_v<int, remove_pointer_t<int* const>> == true);
+    CHECK(is_same_v<int, remove_pointer_t<int* volatile>> == true);
+    CHECK(is_same_v<int, remove_pointer_t<int* const volatile>> == true);
+}
+
+TEST_CASE("adds a pointer to the given type")
+{
+    CHECK(is_same_v<int*, add_pointer_t<int>> == true);
+    CHECK(is_same_v<int**, add_pointer_t<int*>> == true);
+}
+
+template<class T>
+T test_type_identity (T a, type_identity_t<T> b) { return a + b; }
+
+TEST_CASE("returns the type argument unchanged")
+{
+    CHECK(test_type_identity(4.2, 1) == 5.2);
+}
+
+TEST_CASE("combines remove_cv and remove_reference")
+{
+    CHECK(is_same_v<remove_cvref_t<int>, int>);
+    CHECK(is_same_v<remove_cvref_t<int&>, int>);
+    CHECK(is_same_v<remove_cvref_t<int&&>, int>);
+    CHECK(is_same_v<remove_cvref_t<const int&>, int>);
+    CHECK(is_same_v<remove_cvref_t<const int[2]>, int[2]>);
+    CHECK(is_same_v<remove_cvref_t<const int(&)[2]>, int[2]>);
+    CHECK(is_same_v<remove_cvref_t<int(int)>, int(int)>);
+}
+
+TEST_CASE("applies type transformations as when passing a function argument by value")
+{
+    CHECK(is_same_v<decay_t<int>, int>);
+    CHECK(!is_same_v<decay_t<int>, float>);
+    CHECK(is_same_v<decay_t<int&>, int>);
+    CHECK(is_same_v<decay_t<int&&>, int>);
+    CHECK(is_same_v<decay_t<const int&>, int>);
+    CHECK(is_same_v<decay_t<int[2]>, int*>);
+    CHECK(!is_same_v<decay_t<int[4][2]>, int*>);
+    CHECK(!is_same_v<decay_t<int[4][2]>, int**>);
+    CHECK(is_same_v<decay_t<int[4][2]>, int(*)[2]>);
+    CHECK(is_same_v<decay_t<int(int)>, int(*)(int)>);
+}
+
+template<class T, enable_if_t<!is_same_v<T, int>>* = nullptr>
+bool test_enable_if ()
+{
+    return false;
+}
+
+template<class T, enable_if_t<is_same_v<T, int>>* = nullptr>
+bool test_enable_if ()
+{
+    return true;
+}
+
+TEST_CASE("conditionally removes a function overload or template specialization from overload resolution")
+{
+    CHECK(test_enable_if<int>());
+    CHECK(!test_enable_if<double>());
+}
+
+TEST_CASE("chooses one type or another based on compile-time boolean")
+{
+    CHECK(is_same_v<conditional_t<true, int, double>, int>);
+    CHECK(is_same_v<conditional_t<false, int, double>, double>);
+}
+
+TEST_CASE("variadic logical AND/OR/NOT metafunction")
+{
+    CHECK(conjunction_v<true_type, true_type, true_type>);
+    CHECK(!conjunction_v<true_type, false_type, true_type>);
+
+    CHECK(disjunction_v<true_type, false_type, false_type>);
+    CHECK(!disjunction_v<false_type, false_type>);
+
+    CHECK(!negation_v<true_type>);
+    CHECK(negation_v<false_type>);
+}
+
+TEST_SUITE_END  ();

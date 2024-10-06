@@ -119,7 +119,7 @@ template<class T, class U> struct reference_converts_from_temporary;
 
 template<class T> struct alignment_of;
 template<class T> struct rank;
-template<class T, unsigned I = 0> struct extent;
+template<class T, unsigned I = 0> struct extent : integral_constant<size_t, 0> {};
 
 //
 // type relations
@@ -216,8 +216,8 @@ template<class T> struct unwrap_ref_decay;
 template<class T> using type_identity_t                     = typename type_identity<T>::type;
 template<class T> using remove_cvref_t                      = typename remove_cvref<T>::type;
 template<class T> using decay_t                             = typename decay<T>::type;
-template<bool b, class T = void> using enable_if_t          = typename enable_if<b, T>::type;
-template<bool b, class T, class F> using conditional_t      = typename conditional<b, T, F>::type;
+template<bool B, class T = void> using enable_if_t          = typename enable_if<B, T>::type;
+template<bool B, class T, class F> using conditional_t      = typename conditional<B, T, F>::type;
 template<class... T> using common_type_t                    = typename common_type<T...>::type;
 template<class... T> using common_reference_t               = typename common_reference<T...>::type;
 template<class T> using underlying_type_t                   = typename underlying_type<T>::type;
@@ -433,10 +433,6 @@ struct is_function :
         bool_constant<!is_const_v<const T> && !is_reference_v<T>> {};
 #pragma warning(pop)
 
-//
-// TODO: Add Traits Types We Needed.
-//
-
 // checks if a type is a pointer to a non-static member function
 namespace detail
 {
@@ -487,7 +483,6 @@ struct is_object : integral_constant<bool,
 template<class T>
 struct is_compound : integral_constant<bool, !is_fundamental<T>::value> {};
 
-
 // checks if a type is a pointer to a non-static member function or object
 namespace detail
 {
@@ -506,6 +501,25 @@ template<class T> struct is_const<const T> : true_type {};
 // checks if a type is volatile-qualified
 template<class T> struct is_volatile : false_type {};
 template<class T> struct is_volatile<volatile T> : true_type {};
+
+// obtains the number of dimensions of an array type
+template<class T>
+struct rank : public integral_constant<size_t, 0> {};
+template<class T>
+struct rank<T[]> : public integral_constant<size_t, rank<T>::value + 1> {};
+template<class T, size_t N>
+struct rank<T[N]> : public integral_constant<size_t, rank<T>::value + 1> {};
+
+// obtains the size of an array type along a specified dimension
+
+template<class T>
+struct extent<T[], 0> : integral_constant<size_t, 0> {};
+template<class T, unsigned N>
+struct extent<T[], N> : extent<T, N - 1> {};
+template<class T, size_t I>
+struct extent<T[I], 0> : integral_constant<size_t, I> {};
+template<class T, size_t I, unsigned N>
+struct extent<T[I], N> : extent<T, N - 1> {};
 
 // checks if two types are the same
 template<class T, class U>
@@ -579,5 +593,200 @@ struct add_cv
 {
     using type = const volatile T;
 };
+
+// removes a reference from the given type
+template<class T> struct remove_reference
+{
+    typedef T type;
+};
+template<class T> struct remove_reference<T &>
+{
+    typedef T type;
+};
+template<class T> struct remove_reference<T &&>
+{
+    typedef T type;
+};
+
+// adds a lvalue or rvalue reference to the given type
+namespace detail
+{
+    template<class T, class = void>
+    struct add_reference_helper
+    {
+        using _Lvalue = T;
+        using _Rvalue = T;
+    };
+
+    template<class T>
+    struct add_reference_helper<T, void_t<T &>>
+    {
+        using _Lvalue = T &;
+        using _Rvalue = T &&;
+    };
+}
+
+template<class T>
+struct add_lvalue_reference
+{
+    using type = typename detail::add_reference_helper<T>::_Lvalue;
+};
+template<class T>
+struct add_rvalue_reference
+{
+    using type = typename detail::add_reference_helper<T>::_Rvalue;
+};
+
+// removes one extent from the given array type
+template<class T>
+struct remove_extent
+{
+    using type = T;
+};
+template<class T>
+struct remove_extent<T[]>
+{
+    using type = T;
+};
+template<class T, size_t N>
+struct remove_extent<T[N]>
+{
+    using type = T;
+};
+
+// removes all extents from the given array type
+template<class T>
+struct remove_all_extents
+{
+    using type = T;
+};
+template<class T>
+struct remove_all_extents<T[]>
+{
+    using type = typename remove_all_extents<T>::type;
+};
+template<class T, size_t N>
+struct remove_all_extents<T[N]>
+{
+    using type = typename remove_all_extents<T>::type;
+};
+
+// 	removes a pointer from the given type
+template<class T>
+struct remove_pointer
+{
+    using type = T;
+};
+template<class T>
+struct remove_pointer<T *>
+{
+    using type = T;
+};
+template<class T>
+struct remove_pointer<T * const>
+{
+    using type = T;
+};
+template<class T>
+struct remove_pointer<T * volatile>
+{
+    using type = T;
+};
+template<class T>
+struct remove_pointer<T * const volatile>
+{
+    using type = T;
+};
+
+// adds a pointer to the given type
+namespace detail
+{
+    template<class _Ty, class = void>
+    struct add_pointer_helper
+    {
+        using type = _Ty;
+    };
+
+    template<class _Ty>
+    struct add_pointer_helper<_Ty, void_t<remove_reference_t<_Ty> *>>
+    {
+        using type = remove_reference_t<_Ty> *;
+    };
+}
+
+template<class _Ty>
+struct add_pointer
+{
+    using type = typename detail::add_pointer_helper<_Ty>::type;
+};
+
+// returns the type argument unchanged
+template<class T>
+struct type_identity
+{
+    using type = T;
+};
+
+// combines remove_cv and remove_reference
+template<class T>
+struct remove_cvref
+{
+    using type = remove_cv_t<remove_reference_t<T>>;
+};
+
+// applies type transformations as when passing a function argument by value
+template<class T>
+struct decay
+{
+private:
+    using U = typename remove_reference<T>::type;
+
+public:
+    using type = conditional_t<is_array_v<U>,
+                               add_pointer_t<remove_extent_t<U>>,
+                               conditional_t<is_function_v<U>,
+                                             add_pointer_t<U>,
+                                             remove_cv_t<U>>>;
+};
+
+// conditionally removes a function overload or template specialization from overload resolution
+template<class T> struct enable_if<true, T>
+{
+    typedef T type;
+};
+
+// chooses one type or another based on compile-time boolean
+template<bool B, class T, class F>
+struct conditional
+{
+    using type = T;
+};
+template<class T, class F>
+struct conditional<false, T, F>
+{
+    using type = F;
+};
+
+// variadic logical AND metafunction
+template<class...>
+struct conjunction : true_type {};
+template<class B1>
+struct conjunction<B1> : B1 {};
+template<class B1, class... Bn>
+struct conjunction<B1, Bn...>
+        : conditional_t<static_cast<bool>(B1::value), conjunction<Bn...>, B1> {};
+
+// variadic logical OR metafunction
+template<class...>
+struct disjunction : false_type {};
+template<class B1>
+struct disjunction<B1> : B1 {};
+template<class B1, class... Bn>
+struct disjunction<B1, Bn...>
+        : conditional_t<static_cast<bool>(B1::value), B1, disjunction<Bn...>> {};
+
+// logical NOT metafunction
+template<class B>
+struct negation : bool_constant<!static_cast<bool>(B::value)> {};
 
 #endif //DSTL_TYPETRAITS_H
