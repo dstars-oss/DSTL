@@ -18,6 +18,14 @@ using namespace dstl;
 
 TEST_SUITE_BEGIN("TypeTraits");
 
+struct test_empty_struct {};
+
+struct test_struct
+{
+    int i_;
+    double f_;
+};
+
 union test_union
 {
     int i_;
@@ -34,6 +42,56 @@ public:
 
     void member_func () { ++val_; }
     static void static_member_func (const char *msg) { (void) msg; }
+};
+
+class test_standard_layout_class
+{
+private:
+    int private_val_ = 0;
+
+public:
+    void member_func () { ++private_val_; }
+    static void static_member_func (const char *msg) { (void) msg; }
+};
+
+class test_base_class
+{
+protected:
+    int val_ = 0;
+
+public:
+    virtual ~test_base_class () = default;
+    virtual void member_func () { ++val_; }
+
+    [[nodiscard]] int get_val () const { return val_; }
+};
+
+class test_derived_class final : public test_base_class
+{
+public:
+    void member_func () override
+    {
+        val_ += 10;
+    }
+};
+
+class test_base_interface
+{
+protected:
+    int val_ = 0;
+
+public:
+    virtual ~test_base_interface () = default;
+    virtual void member_func () = 0;
+};
+
+class test_derived_interface final : public test_base_interface
+{
+public:
+    void member_func () override
+    {
+        val_ += 10;
+    }
 };
 
 void test_global_func (const char *msg) { (void) msg; }
@@ -56,7 +114,7 @@ TEST_CASE("checks if a type is nullptr_t")
     CHECK(!is_null_pointer_v<int*>);
 }
 
-TEST_CASE("checks if a type is an integral type")
+TEST_CASE("checks if a type is a integral type")
 {
     CHECK(is_integral_v<char>);
     CHECK(is_integral_v<wchar_t>);
@@ -94,7 +152,7 @@ TEST_CASE("checks if a type is a floating-point type")
     CHECK(is_floating_point_v<long double>);
 }
 
-TEST_CASE("checks if a type is an array type")
+TEST_CASE("checks if a type is a array type")
 {
     CHECK(!is_array<test_class>::value);
     CHECK(is_array<test_class[]>::value);
@@ -168,7 +226,7 @@ TEST_CASE("checks if a type is a pointer to a non-static member function")
     CHECK(is_member_function_pointer_v<decltype(&test_class::member_func)>);
 }
 
-TEST_CASE("checks if a type is an enumeration type")
+TEST_CASE("checks if a type is a enumeration type")
 {
     enum e1 { e1_ };
     enum class e2 { e2_ };
@@ -206,7 +264,7 @@ TEST_CASE("checks if a type is either a lvalue reference or rvalue reference")
     CHECK(is_reference_v<double*&&>);;
 }
 
-TEST_CASE("checks if a type is an arithmetic type")
+TEST_CASE("checks if a type is a arithmetic type")
 {
     CHECK(is_arithmetic_v<bool> == true);
     CHECK(is_arithmetic_v<char> == true);
@@ -257,7 +315,7 @@ TEST_CASE("checks if a type is a scalar type")
     CHECK(is_scalar_v<test_class> == false);
 }
 
-TEST_CASE("checks if a type is an object type")
+TEST_CASE("checks if a type is a object type")
 {
     CHECK(!is_object_v<void>);
     CHECK(is_object_v<int>);
@@ -321,7 +379,81 @@ TEST_CASE("checks if a type is volatile-qualified")
     CHECK(is_volatile_v<volatile const int>);
 }
 
-TEST_CASE("obtains the number of dimensions of an array type")
+TEST_CASE("checks if a type is trivial")
+{
+    CHECK(is_trivial_v<test_union>);
+    CHECK(is_trivial_v<test_struct>);
+    CHECK(!is_trivial_v<test_class>);
+    CHECK(!is_trivial_v<test_base_class>);
+    CHECK(!is_trivial_v<test_derived_class>);
+}
+
+TEST_CASE("checks if a type is trivially copyable")
+{
+    CHECK(is_trivially_copyable_v<test_union>);
+    CHECK(is_trivially_copyable_v<test_struct>);
+    CHECK(is_trivially_copyable_v<test_class>);
+    CHECK(!is_trivially_copyable_v<test_base_class>);
+    CHECK(!is_trivially_copyable_v<test_derived_class>);
+}
+
+TEST_CASE("checks if a type is a standard-layout type")
+{
+    CHECK(is_standard_layout_v<test_union>);
+    CHECK(is_standard_layout_v<test_struct>);
+
+    CHECK(!is_standard_layout_v<test_class>);
+    CHECK(is_standard_layout_v<test_standard_layout_class>);
+
+    CHECK(!is_standard_layout_v<test_base_class>);
+    CHECK(!is_standard_layout_v<test_derived_class>);
+}
+
+TEST_CASE("checks if a type is a class (but not union) type and has no non-static data members")
+{
+    CHECK(!is_empty_v<test_struct>);
+    CHECK(!is_empty_v<test_union>);
+
+    CHECK(is_empty_v<test_empty_struct>);
+}
+
+TEST_CASE("checks if a type is a polymorphic class type")
+{
+    CHECK(!is_polymorphic_v<test_struct>);
+    CHECK(!is_polymorphic_v<test_union>);
+    CHECK(is_polymorphic_v<test_base_class>);
+
+    CHECK(is_polymorphic_v<test_derived_class>);
+}
+
+TEST_CASE("checks if a type is a abstract class type")
+{
+    CHECK(!is_abstract_v<test_struct>);
+    CHECK(!is_abstract_v<test_union>);
+    CHECK(!is_abstract_v<test_base_class>);
+    CHECK(!is_abstract_v<test_derived_class>);
+
+    CHECK(is_abstract_v<test_base_interface>);
+    CHECK(!is_abstract_v<test_derived_interface>);
+}
+
+TEST_CASE("checks if a type is a final class type")
+{
+    CHECK(!is_final_v<test_struct>);
+    CHECK(!is_final_v<test_union>);
+    CHECK(is_final_v<test_derived_class>);
+    CHECK(is_final_v<test_derived_interface>);
+}
+
+TEST_CASE("checks if a type is a aggregate type")
+{
+    CHECK(is_aggregate_v<test_struct>);
+    CHECK(is_aggregate_v<test_union>);
+    CHECK(!is_aggregate_v<test_class>);
+    CHECK(!is_aggregate_v<test_derived_class>);
+}
+
+TEST_CASE("obtains the number of dimensions of a array type")
 {
     CHECK(rank<int>{} == 0);
     CHECK(rank<int[5]>{} == 1);
@@ -329,7 +461,7 @@ TEST_CASE("obtains the number of dimensions of an array type")
     CHECK(rank<int[][5][5]>{} == 3);
 }
 
-TEST_CASE("obtains the size of an array type along a specified dimension")
+TEST_CASE("obtains the size of a array type along a specified dimension")
 {
     CHECK(extent_v<int[3]> == 3);
     CHECK(extent_v<int[3], 0> == 3);
@@ -355,6 +487,13 @@ TEST_CASE("removes const and/or volatile specifiers from the given type")
     CHECK(is_same_v<remove_cv_t<const volatile int*>, const volatile int*>);
     CHECK(is_same_v<remove_cv_t<const int* volatile>, const int*>);
     CHECK(is_same_v<remove_cv_t<int* const volatile>, int*>);
+}
+
+TEST_CASE("checks if a type is a base of the other type")
+{
+    CHECK(is_base_of_v<test_base_class, test_derived_class>);
+    CHECK(is_base_of_v<test_base_interface, test_derived_interface>);
+    CHECK(!is_base_of_v<test_base_class, test_derived_interface>);
 }
 
 TEST_CASE("adds const and/or volatile specifiers to the given type")
@@ -476,6 +615,12 @@ TEST_CASE("variadic logical AND/OR/NOT metafunction")
 
     CHECK(!negation_v<true_type>);
     CHECK(negation_v<false_type>);
+}
+
+TEST_CASE("checks if a type is trivial")
+{
+    CHECK(is_trivial_v<test_struct>);
+    CHECK(!is_trivial_v<test_class>);
 }
 
 TEST_SUITE_END  ();

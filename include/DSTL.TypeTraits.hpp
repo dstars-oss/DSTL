@@ -360,6 +360,10 @@ template<class B> inline constexpr bool negation_v       = negation<B>::value;
 template<class T>
 struct is_void : is_same<void, remove_cv_t<T>> {};
 
+// checks if a type is a base of the other type
+template<class B, class D>
+struct is_base_of : bool_constant<__is_base_of(B, D)> {};
+
 // checks if a type is nullptr_t
 template<class T>
 struct is_null_pointer : is_same<decltype(nullptr), remove_cv_t<T>> {};
@@ -501,6 +505,38 @@ template<class T> struct is_const<const T> : true_type {};
 // checks if a type is volatile-qualified
 template<class T> struct is_volatile : false_type {};
 template<class T> struct is_volatile<volatile T> : true_type {};
+
+// checks if a type is trivial
+template<class T>
+struct is_trivial : bool_constant<__is_trivial(T)> {};
+
+// checks if a type is trivially copyable
+template<class T>
+struct is_trivially_copyable : bool_constant<__is_trivially_copyable(T)> {};
+
+// checks if a type is a standard-layout type
+template<class T>
+struct is_standard_layout : bool_constant<__is_standard_layout(T)> {};
+
+// checks if a type is a class (but not union) type and has no non-static data members
+template<class T>
+struct is_empty : bool_constant<__is_empty(T)> {};
+
+// checks if a type is a polymorphic class type
+template<class T>
+struct is_polymorphic : bool_constant<__is_polymorphic(T)> {};
+
+// checks if a type is an abstract class type
+template<class T>
+struct is_abstract : bool_constant<__is_abstract(T)> {};
+
+// checks if a type is a final class type
+template<class T>
+struct is_final : bool_constant<__is_final(T)> {};
+
+// checks if a type is a polymorphic class type
+template<class T>
+struct is_aggregate : bool_constant<__is_aggregate(T)> {};
 
 // obtains the number of dimensions of an array type
 template<class T>
@@ -701,23 +737,23 @@ struct remove_pointer<T * const volatile>
 // adds a pointer to the given type
 namespace detail
 {
-    template<class _Ty, class = void>
+    template<class T, class = void>
     struct add_pointer_helper
     {
-        using type = _Ty;
+        using type = T;
     };
 
-    template<class _Ty>
-    struct add_pointer_helper<_Ty, void_t<remove_reference_t<_Ty> *>>
+    template<class T>
+    struct add_pointer_helper<T, void_t<remove_reference_t<T> *>>
     {
-        using type = remove_reference_t<_Ty> *;
+        using type = remove_reference_t<T> *;
     };
 }
 
-template<class _Ty>
+template<class T>
 struct add_pointer
 {
-    using type = typename detail::add_pointer_helper<_Ty>::type;
+    using type = typename detail::add_pointer_helper<T>::type;
 };
 
 // returns the type argument unchanged
